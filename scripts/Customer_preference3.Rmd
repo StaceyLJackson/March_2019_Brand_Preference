@@ -1,0 +1,212 @@
+---
+title: "Brand_preference"
+author: "Stacey Jackson"
+date: "15/03/2019"
+output:
+  word_document: default
+  html_document: default
+---
+
+Load the files and take a look at the headings
+```{r}
+library("caret")
+CompleteResponses<-read.csv(file="/Users/staceyjackson/Dropbox (Personal)/Ubiqum/DataAnalytics2/Task2_Classification/CompleteResponses.csv", header=TRUE, sep=",")
+SurveyIncomplete<-read.csv(file="/Users/staceyjackson/Dropbox (Personal)/Ubiqum/DataAnalytics2/Task2_Classification/SurveyIncomplete.csv", header=TRUE, sep=",")
+
+attributes(CompleteResponses)
+```
+
+PREPROCESSING STAGE
+
+Datatypes
+```{r}
+str(CompleteResponses)
+```
+
+Change elevel,car, zipcode and brand to factors
+```{r}
+CompleteResponses$elevel<-as.factor(CompleteResponses$elevel)
+CompleteResponses$brand<-as.factor(CompleteResponses$brand)
+CompleteResponses$car<-as.factor(CompleteResponses$car)
+CompleteResponses$zipcode<-as.factor(CompleteResponses$zipcode)
+str(CompleteResponses)
+```
+
+Check missing levels - no missing levels
+```{r}
+summary(CompleteResponses)
+```
+
+Plots of the variables
+```{r}
+hist(CompleteResponses$salary)
+hist(CompleteResponses$age)
+plot(CompleteResponses$elevel)
+plot(CompleteResponses$car)
+plot(CompleteResponses$zipcode)
+plot(CompleteResponses$brand)
+
+```
+Distibution of the numerical variables
+```{r}
+qqnorm(CompleteResponses$salary)
+qqnorm(CompleteResponses$age)
+qqnorm(CompleteResponses$credit)
+```
+Check the correlation between the numerical variables
+```{r}
+CompleteResponses2<-CompleteResponses[,-c(3:5,7)]
+correlationMatrix<-cor(CompleteResponses2)
+print(correlationMatrix)
+```
+
+
+Creating the training and testing sets
+```{r}
+set.seed(998)
+CompleteResponses<-CompleteResponses[sample(1:nrow(CompleteResponses),9898,replace=FALSE),]
+inTraining<-createDataPartition(CompleteResponses$brand,p=.75,list=FALSE)
+training<-CompleteResponses[inTraining,]
+testing<-CompleteResponses[-inTraining,]
+```
+model using a decision tree, C5.0 on the training set with 10-fold cross validation and an Automatic Tuning Grid with a tuneLength of 2
+```{r}
+
+library(C50)
+fitControl<-trainControl(method="repeatedcv",number = 10,repeats=1)
+c50Fit1<-train(brand~.,data=training,method="C5.0",trControl=fitControl,tuneLength=2)
+c50Fit1
+```
+Assess the performance of the trained model and record the Accuracy and Kappa scores for each parameter value the model used during training
+```{r}
+c50Fit1$bestTune
+```
+
+How the model prioritized each feature in the training
+```{r}
+varImp(c50Fit1)
+```
+Plot the model
+
+```{r}
+plot(c50Fit1)
+```
+
+THE VARIABLES - looking at relationships
+```{r}
+summary(CompleteResponses)
+summary(SurveyIncomplete)
+summary(training)
+summary(testing)
+
+boxplot(CompleteResponses$salary)
+boxplot(CompleteResponses$age)
+boxplot(CompleteResponses$credit)
+
+plot(CompleteResponses$brand,CompleteResponses$salary)
+plot(CompleteResponses$brand,CompleteResponses$age)
+plot(CompleteResponses$brand,CompleteResponses$elevel)
+plot(CompleteResponses$brand,CompleteResponses$car)
+plot(CompleteResponses$brand,CompleteResponses$zipcode)
+plot(CompleteResponses$brand,CompleteResponses$credit)
+
+```
+
+#Use Random Forest with 10-fold cross validation and manually tune 5 different mtry values
+```{r}
+#rfGrid<-expand.grid(mtry=c(1,2,3,4,5))
+#rfFit1<-train(brand~.,data=training,method="rf",trControl=fitControl,tuneGrid=rfGrid)
+#rfFit1
+```
+#How the model prioritized each feature in the training
+```{r}
+#varImp(rfFit1)
+```
+Change elevel,car, zipcode and brand to factors in the SurveyIncomplete dataset
+```{r}
+SurveyIncomplete$elevel<-as.factor(SurveyIncomplete$elevel)
+SurveyIncomplete$brand<-as.factor(SurveyIncomplete$brand)
+SurveyIncomplete$car<-as.factor(SurveyIncomplete$car)
+SurveyIncomplete$zipcode<-as.factor(SurveyIncomplete$zipcode)
+```
+Make predictions using the C5.0 model which has better accuracy
+```{r}
+predictions<-predict(c50Fit1, SurveyIncomplete)
+predictions
+
+```
+After making the predictions using the test set use postResample() to assess the metrics of the new predictions compared to the Ground Truth (see the resources for more information)
+Did something interesting happen here? If so, be prepared to explain why!
+
+Negative kappa score ie. less agreement than would be expected by chance. And accuracy of only 52%.
+
+```{r}
+postResample(pred=predictions, obs=testing$brand)
+```
+
+
+how many individuals are predicted to prefer Sony and Acer
+```{r}
+summary(predictions)
+```
+
+
+TO DO: Explain the importance of each feature used in the model and support it with quantitative evidence.
+	100.00%	salary
+	 95.85%	age
+	 39.25%	car15
+	 33.24%	car16
+	  3.93%	zipcode5
+
+Plot of the predictions
+```{r}
+library(ggplot2)
+df<-data.frame(prediction=c("Acer","Sony"),frequency=c(1896,3104))
+p<-ggplot(data=df,aes(x=prediction,y=frequency, fill=prediction))+geom_bar(stat="identity")+geom_text(aes(label=frequency),vjust=1.6,color="white",size=3.5)
+p
+
+```
+Combined totals - predictions and from complete survey
+
+```{r}
+df_both<-data.frame(prediction_and_complete_survey=c("Acer","Sony"),frequency=c(5640,9258))
+p<-ggplot(data=df_both,aes(x=prediction_and_complete_survey,y=frequency, fill=prediction_and_complete_survey))+geom_bar(stat="identity")+geom_text(aes(label=frequency),vjust=1.6,color="white",size=3.5)
+p
+```
+Comparing training and testing data
+```{r}
+plot(training$car,xlab="car training")
+plot(testing$car,xlab="car testing")
+
+plot(training$elevel,xlab="elevel training")
+plot(testing$elevel,xlab="elevel testing")
+
+hist(training$salary,xlab="salary training")
+hist(testing$salary,xlab="salary testing")
+
+plot(training$zipcode,xlab="zipcode training")
+plot(testing$zipcode,xlab="zipcode testing")
+
+hist(training$credit,xlab="credit training")
+hist(testing$credit,xlab="credit testing")
+
+hist(training$age,xlab="age training")
+hist(testing$age,xlab="age testing")
+
+boxplot(training$age,main="age training")
+boxplot(testing$age, main="age testing")
+
+table(training$car)
+table(testing$car)
+
+table(training$elevel)
+table(testing$elevel)
+
+table(training$car)
+table(testing$car)
+
+table(training$zipcode)
+table(testing$zipcode)
+
+```
+
